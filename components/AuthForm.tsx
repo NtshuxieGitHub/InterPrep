@@ -10,6 +10,12 @@ import Link from "next/link";
 import { toast } from "sonner";
 import FormField from "./FormField";
 import { useRouter } from "next/navigation";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "@/firebase/client";
+import { signIn, signUp } from "@/lib/actions/auth.action";
 
 const authFormSchema = (type: FormType) => {
   return z.object({
@@ -32,12 +38,52 @@ const AuthForm = ({ type }: { type: FormType }) => {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       if (type === "sign-up") {
+        const { name, email, password } = values;
+
+        const userCredentials = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+
+        const output = await signUp({
+          uid: userCredentials.user.uid,
+          name: name!,
+          email,
+          password,
+        });
+
+        if (!output.success) {
+          toast.error(output.message);
+          return;
+        }
+
         toast.success("Account created successfully. Sign in.");
         router.push("/sign-in");
       } else {
+        const { email, password } = values;
+
+        const userCredentials = await signInWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+
+        const idToken = await userCredentials.user.getIdToken();
+
+        if (!idToken) {
+          toast.error("Failed to sign in. Please try again.");
+          return;
+        }
+
+        await signIn({
+          email,
+          idToken,
+        });
+
         toast.success("Sign in successful.");
         router.push("/");
       }
@@ -45,7 +91,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
       console.log(error);
       toast.error(`An error occured: ${error}`);
     }
-  }
+  };
 
   const isSignIn = type === "sign-in";
 
@@ -68,14 +114,14 @@ const AuthForm = ({ type }: { type: FormType }) => {
                 control={form.control}
                 name="name"
                 label="Name"
-                placeholder="Chuck Bartowski"
+                placeholder="Enter Your Name"
               />
             )}
             <FormField
               control={form.control}
               name="email"
               label="Email"
-              placeholder="cbartowski@email.com"
+              placeholder="Enter Your Email Address"
               type="email"
             />
 
@@ -83,7 +129,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
               control={form.control}
               name="password"
               label="Password"
-              placeholder="**********"
+              placeholder="Enter your Password"
               type="password"
             />
 
